@@ -8,89 +8,83 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            overscroll-behavior: none; /* Prevents pull-to-refresh on mobile */
+            overscroll-behavior: none;
         }
-        .font-inter { /* Ensure Inter is loaded if Tailwind doesn't pick it up by default */
+        .font-inter {
             font-family: 'Inter', sans-serif;
         }
         #imageCanvas {
             cursor: crosshair;
-            max-width: 100%;
-            height: auto;
-            border-radius: 0.5rem; /* rounded-lg */
-            border: 1px solid #e5e7eb; /* border-gray-200 */
+            width: 100%; /* Canvas width will be set by JS, this is a fallback */
+            height: auto; /* Canvas height will be set by JS */
+            border-radius: 0.5rem;
+            border: 1px solid #e5e7eb;
+            touch-action: none; /* Prevent default touch actions like scrolling when panning */
         }
         #cameraStream {
             width: 100%;
-            max-height: 400px; /* Limit height of camera preview */
+            max-height: 400px;
             height: auto;
             border-radius: 0.5rem;
-            border: 1px solid #d1d5db; /* border-gray-300 */
-            background-color: #000; /* Black background for video element */
+            border: 1px solid #d1d5db;
+            background-color: #000;
         }
         .color-swatch {
             width: 50px;
             height: 50px;
-            border-radius: 0.375rem; /* rounded-md */
-            border: 1px solid #9ca3af; /* border-gray-400 */
+            border-radius: 0.375rem;
+            border: 1px solid #9ca3af;
             display: inline-block;
             vertical-align: middle;
         }
         .paint-swatch {
             width: 20px;
             height: 20px;
-            border-radius: 0.25rem; /* rounded-sm */
-            border: 1px solid #9ca3af; /* border-gray-400 */
+            border-radius: 0.25rem;
+            border: 1px solid #9ca3af;
             display: inline-block;
             vertical-align: middle;
             margin-right: 8px;
         }
-        /* Custom modal styles */
         .modal {
-            display: none; /* Hidden by default */
-            position: fixed; /* Stay in place */
-            z-index: 1000; /* Sit on top */
-            left: 0;
-            top: 0;
-            width: 100%; /* Full width */
-            height: 100%; /* Full height */
-            overflow: auto; /* Enable scroll if needed */
-            background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+            display: none; position: fixed; z-index: 1000;
+            left: 0; top: 0; width: 100%; height: 100%;
+            overflow: auto; background-color: rgba(0,0,0,0.4);
         }
         .modal-content {
-            background-color: #fefefe;
-            margin: 15% auto; /* 15% from the top and centered */
-            padding: 20px;
-            border: 1px solid #888;
-            width: 80%; /* Could be more or less, depending on screen size */
-            max-width: 500px;
-            border-radius: 0.5rem;
-            text-align: center;
+            background-color: #fefefe; margin: 15% auto; padding: 20px;
+            border: 1px solid #888; width: 80%; max-width: 500px;
+            border-radius: 0.5rem; text-align: center;
         }
         .modal-close-button {
-            color: #aaa;
-            float: right;
-            font-size: 28px;
-            font-weight: bold;
+            color: #aaa; float: right; font-size: 28px; font-weight: bold;
         }
-        .modal-close-button:hover,
-        .modal-close-button:focus {
-            color: black;
-            text-decoration: none;
-            cursor: pointer;
+        .modal-close-button:hover, .modal-close-button:focus {
+            color: black; text-decoration: none; cursor: pointer;
         }
         .loader {
-            border: 5px solid #f3f3f3; /* Light grey */
-            border-top: 5px solid #3498db; /* Blue */
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 20px auto;
+            border: 5px solid #f3f3f3; border-top: 5px solid #3498db;
+            border-radius: 50%; width: 40px; height: 40px;
+            animation: spin 1s linear infinite; margin: 20px auto;
         }
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
+        }
+        .zoom-button {
+            padding: 0.5rem 0.75rem; /* py-2 px-3 */
+            background-color: #e5e7eb; /* bg-gray-200 */
+            color: #374151; /* text-gray-700 */
+            font-semibold;
+            border-radius: 0.375rem; /* rounded-md */
+            transition: background-color 0.15s ease-in-out;
+        }
+        .zoom-button:hover {
+            background-color: #d1d5db; /* hover:bg-gray-300 */
+        }
+        .zoom-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -108,41 +102,33 @@
                 <label for="imageUpload" class="block text-sm font-medium text-gray-700 mb-1">Upload Image:</label>
                 <input type="file" id="imageUpload" accept="image/*" class="block w-full text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 cursor-pointer focus:outline-none focus:border-blue-500 p-2.5">
             </div>
-
-            <div class="text-center my-3">
-                <span class="text-gray-500 text-sm">OR</span>
-            </div>
-
-            <button id="useCameraButton" class="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition duration-150 ease-in-out mb-4">
-                Use Camera
-            </button>
+            <div class="text-center my-3"><span class="text-gray-500 text-sm">OR</span></div>
+            <button id="useCameraButton" class="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition duration-150 ease-in-out mb-4">Use Camera</button>
         </div>
 
         <div id="cameraView" class="hidden mb-4">
-            <video id="cameraStream" playsinline autoplay muted class="mb-2"></video> <button id="takePhotoButton" class="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-150 ease-in-out">
-                Take Photo
-            </button>
-            <button id="cancelCameraButton" class="w-full bg-gray-400 hover:bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 transition duration-150 ease-in-out mt-2">
-                Cancel Camera
-            </button>
+            <video id="cameraStream" playsinline autoplay muted class="mb-2"></video>
+            <button id="takePhotoButton" class="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md">Take Photo</button>
+            <button id="cancelCameraButton" class="w-full bg-gray-400 hover:bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md mt-2">Cancel Camera</button>
         </div>
-
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div>
                 <h2 class="text-lg font-semibold text-gray-700 mb-2">Image Preview:</h2>
                 <canvas id="imageCanvas" class="bg-gray-200"></canvas>
-                <p id="canvasHelperText" class="text-xs text-gray-500 mt-1 text-center">Upload an image or use camera to begin.</p>
+                <div class="flex justify-center items-center space-x-2 my-2">
+                    <button id="zoomOutButton" title="Zoom Out" class="zoom-button" disabled>-</button>
+                    <button id="zoomInButton" title="Zoom In" class="zoom-button" disabled>+</button>
+                    <button id="resetZoomButton" title="Reset Zoom" class="zoom-button" disabled>Reset</button>
+                </div>
+                <p id="canvasHelperText" class="text-xs text-gray-500 mt-1 text-center">Upload an image or use camera. Drag to pan when zoomed.</p>
             </div>
             <div>
                 <h2 class="text-lg font-semibold text-gray-700 mb-2">Selected Color:</h2>
                 <div id="selectedColorInfo" class="p-4 bg-gray-50 rounded-lg border border-gray-200 min-h-[100px] flex items-center justify-center">
                     <span class="text-gray-500">No color selected</span>
                 </div>
-
-                <button id="findMixButton" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-150 ease-in-out disabled:opacity-50" disabled>
-                    Find Paint Mix
-                </button>
+                <button id="findMixButton" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md disabled:opacity-50" disabled>Find Paint Mix</button>
             </div>
         </div>
 
@@ -152,19 +138,12 @@
                 <p class="text-gray-500">Upload an image and select a color to see suggestions.</p>
             </div>
         </div>
-
         <div class="mt-6 p-3 bg-yellow-50 border border-yellow-300 rounded-lg text-yellow-700 text-xs">
-            <p><strong>Disclaimer:</strong> Paint data and mixing simulations are approximations. Actual paint mixing results may vary. Use these suggestions as a starting point for your own experimentation. The list of paints used here is a limited sample and not exhaustive of the full Winsor & Newton range.</p>
+            <p><strong>Disclaimer:</strong> Paint data and mixing simulations are approximations. Actual paint mixing results may vary.</p>
         </div>
     </div>
 
-    <div id="loadingModal" class="modal">
-        <div class="modal-content">
-            <p class="text-lg font-semibold mb-2">Calculating Mix...</p>
-            <div class="loader"></div>
-            <p class="text-sm text-gray-600">This might take a moment for complex images or colors.</p>
-        </div>
-    </div>
+    <div id="loadingModal" class="modal"><div class="modal-content"><p class="text-lg font-semibold mb-2">Calculating Mix...</p><div class="loader"></div><p class="text-sm text-gray-600">This might take a moment.</p></div></div>
 
     <script>
         // --- DOM Elements ---
@@ -176,21 +155,33 @@
         const mixingResult = document.getElementById('mixingResult');
         const canvasHelperText = document.getElementById('canvasHelperText');
         const loadingModal = document.getElementById('loadingModal');
-
-        // Camera specific DOM elements
         const imageInputSection = document.getElementById('imageInputSection');
         const useCameraButton = document.getElementById('useCameraButton');
         const cameraView = document.getElementById('cameraView');
         const cameraStreamElement = document.getElementById('cameraStream');
         const takePhotoButton = document.getElementById('takePhotoButton');
         const cancelCameraButton = document.getElementById('cancelCameraButton');
-        let stream = null; // To store the camera stream
+        const zoomInButton = document.getElementById('zoomInButton');
+        const zoomOutButton = document.getElementById('zoomOutButton');
+        const resetZoomButton = document.getElementById('resetZoomButton');
 
+        let stream = null;
         let currentImage = null;
         let selectedRgb = null;
 
-        // --- Paint Database (Simulated Winsor & Newton Acrylics - Galeria or Professional range examples) ---
-        // IMPORTANT: These RGB values are illustrative approximations and not official or precisely measured data.
+        // --- Zoom and Pan State ---
+        let zoomLevel = 1.0;
+        let initialFitZoom = 1.0; // Zoom level to fit the image initially
+        let panX = 0;
+        let panY = 0;
+        let isPanning = false;
+        let lastPanPosition = { x: 0, y: 0 };
+        const MIN_ZOOM = 0.1; // Minimum zoom level
+        const MAX_ZOOM = 10.0; // Maximum zoom level
+        const ZOOM_SENSITIVITY = 1.2;
+
+
+        // --- Paint Database (From User Provided File - Updated) ---
         const WINSOR_NEWTON_ACRYLICS = [
             { name: "Pro Titanium White", rgb: { r: 223, g: 221, b: 217 } }, //rgb(223, 221, 217)
             { name: "Pro Cadmium Yellow Light", rgb: { r: 222, g: 194, b: 3 } }, //rgb(222, 194, 3)
@@ -202,12 +193,13 @@
             { name: "Galeria Permanent Alizarin Crimson", rgb: { r: 137, g: 11, b: 24 } }, //rgb(137, 11, 24)
             { name: "Pro Cerulean Blue", rgb: { r: 1, g: 100, b: 184 } }, //rgb(1, 100, 184)
             { name: "Pro Phthalo Blue (Green Shade)", rgb: { r: 21, g: 26, b: 52 } },
-            { name: "Galeria Permanent Alizarin Crimson", rgb: { r: 143, g: 11, b: 25 } },
+            { name: "Galeria Phthalo Blue", rgb: { r: 6, g: 2, b: 5 } }, //rgb(6, 2, 5)
             { name: "Pro Phthalo Blue (Red Shade)", rgb: { r: 27, g: 28, b: 49 } },
             { name: "Pro Ultramarine Blue", rgb: { r: 2, g: 38, b: 150 } },
             { name: "Galeria Payne's Gray", rgb: { r: 32, g: 34, b: 38 } },
             { name: "Pro Mixing White", rgb: { r: 225, g: 223, b: 218 } },
         ];
+
 
         // --- Event Listeners ---
         imageUpload.addEventListener('change', handleImageUpload);
@@ -216,49 +208,86 @@
         useCameraButton.addEventListener('click', startCamera);
         takePhotoButton.addEventListener('click', takePhoto);
         cancelCameraButton.addEventListener('click', cancelCamera);
+        zoomInButton.addEventListener('click', handleZoomIn);
+        zoomOutButton.addEventListener('click', handleZoomOut);
+        resetZoomButton.addEventListener('click', handleResetZoom);
 
+        // Pan event listeners
+        imageCanvas.addEventListener('mousedown', startPan);
+        imageCanvas.addEventListener('mousemove', panImage);
+        imageCanvas.addEventListener('mouseup', endPan);
+        imageCanvas.addEventListener('mouseleave', endPan);
+        imageCanvas.addEventListener('touchstart', startPan, { passive: false });
+        imageCanvas.addEventListener('touchmove', panImage, { passive: false });
+        imageCanvas.addEventListener('touchend', endPan);
+        imageCanvas.addEventListener('touchcancel', endPan);
+
+
+        // --- Canvas Sizing and Initial Placeholder ---
+        function setCanvasDimensions() {
+            const parentElement = imageCanvas.parentElement;
+            if (!parentElement) return;
+            const parentWidth = parentElement.clientWidth;
+            imageCanvas.width = parentWidth > 0 ? parentWidth : 300; // Use full parent width
+            imageCanvas.height = imageCanvas.width * (2 / 3); // Maintain a 3:2 aspect ratio
+        }
+
+        function drawInitialCanvasPlaceholder() {
+            setCanvasDimensions(); // Ensure canvas dimensions are set
+            canvasCtx.fillStyle = '#e5e7eb'; // bg-gray-200
+            canvasCtx.fillRect(0, 0, imageCanvas.width, imageCanvas.height);
+            canvasCtx.fillStyle = '#9ca3af'; // text-gray-400
+            canvasCtx.textAlign = 'center';
+            canvasCtx.textBaseline = 'middle';
+            canvasCtx.font = '14px Inter';
+            wrapText(canvasCtx, 'Upload an image or use camera. Drag to pan when zoomed.', imageCanvas.width / 2, imageCanvas.height / 2, imageCanvas.width - 20, 18);
+            updateZoomButtons();
+        }
+        
+        window.addEventListener('resize', () => {
+            setCanvasDimensions();
+            if (currentImage) {
+                calculateInitialZoomAndPan(); // Recalculate fit zoom for new canvas size
+                redrawImageWithZoomAndPan();
+            } else {
+                drawInitialCanvasPlaceholder();
+            }
+        });
 
         // --- Image Loading and Processing ---
         function loadImageOnCanvas(imageSrc) {
             currentImage = new Image();
             currentImage.onload = () => {
-                const parentWidth = imageCanvas.parentElement.clientWidth;
-                const maxWidth = (parentWidth && parentWidth > 0) ? Math.min(parentWidth, 500) : 500;
-                
-                const scale = Math.min(maxWidth / currentImage.width, 1);
-                imageCanvas.width = currentImage.width * scale;
-                imageCanvas.height = currentImage.height * scale;
-                canvasCtx.drawImage(currentImage, 0, 0, imageCanvas.width, imageCanvas.height);
+                setCanvasDimensions(); // Ensure canvas dimensions are correct before calculating zoom
+                calculateInitialZoomAndPan();
+                redrawImageWithZoomAndPan();
                 
                 selectedColorInfo.innerHTML = '<span class="text-gray-500">Click image to pick color</span>';
                 selectedRgb = null;
                 findMixButton.disabled = true;
                 mixingResult.innerHTML = '<p class="text-gray-500">Pick a color to see suggestions.</p>';
-                canvasHelperText.textContent = 'Click on the image to select a color.';
+                canvasHelperText.textContent = 'Click to pick color. Drag to pan when zoomed.';
                 
-                // Ensure camera view is hidden and input section is visible
                 cameraView.classList.add('hidden');
                 imageInputSection.classList.remove('hidden');
-                stopCameraStream(); // Stop stream if it was active
+                stopCameraStream();
+                updateZoomButtons();
             };
             currentImage.onerror = () => {
                 canvasHelperText.textContent = 'Error loading image.';
                 alertUser('Error: Could not load the image. Please try again.');
-                cameraView.classList.add('hidden');
-                imageInputSection.classList.remove('hidden');
-                stopCameraStream();
+                currentImage = null; // Reset current image
+                updateZoomButtons(); // Disable zoom buttons
+                drawInitialCanvasPlaceholder(); // Show placeholder
             };
             currentImage.src = imageSrc;
         }
 
-        // --- Image File Handling ---
         function handleImageUpload(event) {
             const file = event.target.files[0];
             if (file) {
                 const reader = new FileReader();
-                reader.onload = (e) => {
-                    loadImageOnCanvas(e.target.result);
-                }
+                reader.onload = (e) => loadImageOnCanvas(e.target.result);
                 reader.readAsDataURL(file);
             }
         }
@@ -267,53 +296,43 @@
         async function startCamera() {
             if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
                 try {
-                    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }); // Prefer rear camera
+                    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
                     cameraStreamElement.srcObject = stream;
                     imageInputSection.classList.add('hidden');
                     cameraView.classList.remove('hidden');
                     canvasHelperText.textContent = 'Position camera and take photo.';
                 } catch (err) {
-                    console.error("Error accessing camera: ", err);
-                    // Fallback to user-facing camera if environment fails or provide more specific error
-                    try {
+                    try { // Fallback
                         stream = await navigator.mediaDevices.getUserMedia({ video: true });
                         cameraStreamElement.srcObject = stream;
                         imageInputSection.classList.add('hidden');
                         cameraView.classList.remove('hidden');
-                        canvasHelperText.textContent = 'Position camera and take photo.';
                     } catch (fallbackErr) {
-                         console.error("Error accessing any camera: ", fallbackErr);
-                         alertUser("Could not access camera. Please ensure permissions are granted and try again. You can still upload a file.");
-                         imageInputSection.classList.remove('hidden');
-                         cameraView.classList.add('hidden');
+                         alertUser("Could not access camera. Ensure permissions are granted.");
+                         cancelCamera(); // Revert UI
                     }
                 }
             } else {
-                alertUser("Camera API not supported by your browser. Please upload a file.");
+                alertUser("Camera API not supported. Please upload a file.");
             }
         }
 
         function takePhoto() {
-            if (!stream || !cameraStreamElement.videoWidth) { // Check if stream is active and video has dimensions
-                alertUser("Camera not ready or stream not active.");
-                return;
+            if (!stream || !cameraStreamElement.videoWidth) {
+                alertUser("Camera not ready."); return;
             }
             const tempCanvas = document.createElement('canvas');
-            // Set canvas dimensions to the video's actual dimensions to capture full quality
             tempCanvas.width = cameraStreamElement.videoWidth;
             tempCanvas.height = cameraStreamElement.videoHeight;
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCtx.drawImage(cameraStreamElement, 0, 0, tempCanvas.width, tempCanvas.height);
-            
-            const dataUrl = tempCanvas.toDataURL('image/png');
-            loadImageOnCanvas(dataUrl); // This will also stop the stream and hide camera view
+            tempCanvas.getContext('2d').drawImage(cameraStreamElement, 0, 0, tempCanvas.width, tempCanvas.height);
+            loadImageOnCanvas(tempCanvas.toDataURL('image/png'));
         }
 
         function stopCameraStream() {
             if (stream) {
                 stream.getTracks().forEach(track => track.stop());
                 stream = null;
-                cameraStreamElement.srcObject = null; // Clear the video element
+                cameraStreamElement.srcObject = null;
             }
         }
 
@@ -321,30 +340,196 @@
             stopCameraStream();
             cameraView.classList.add('hidden');
             imageInputSection.classList.remove('hidden');
-            if (!currentImage) { // If no image was previously loaded, reset helper text
-                 drawInitialCanvasPlaceholder(); // Redraw placeholder if no image is active
-                 canvasHelperText.textContent = 'Upload an image or use camera to begin.';
+            if (!currentImage) {
+                 drawInitialCanvasPlaceholder();
+                 canvasHelperText.textContent = 'Upload an image or use camera. Drag to pan when zoomed.';
             } else {
-                 canvasHelperText.textContent = 'Click on the image to select a color.';
+                 canvasHelperText.textContent = 'Click to pick color. Drag to pan when zoomed.';
             }
+        }
+
+        // --- Zoom and Pan Logic ---
+        function calculateInitialZoomAndPan() {
+            if (!currentImage || !imageCanvas.width || !imageCanvas.height || imageCanvas.width === 0 || imageCanvas.height === 0) {
+                initialFitZoom = 1.0;
+                zoomLevel = 1.0;
+                panX = 0;
+                panY = 0;
+                return;
+            }
+            const canvasAspect = imageCanvas.width / imageCanvas.height;
+            const imageAspect = currentImage.width / currentImage.height;
+
+            if (imageAspect > canvasAspect) { // Image is wider than canvas aspect ratio
+                initialFitZoom = imageCanvas.width / currentImage.width;
+            } else { // Image is taller or same aspect ratio
+                initialFitZoom = imageCanvas.height / currentImage.height;
+            }
+            initialFitZoom = Math.max(MIN_ZOOM, initialFitZoom); // Ensure not too small
+
+            zoomLevel = initialFitZoom;
+            panX = 0; // Centering is handled by redrawImageWithZoomAndPan
+            panY = 0;
+        }
+
+        function redrawImageWithZoomAndPan() {
+            if (!imageCanvas.width || !imageCanvas.height) return; // Canvas not ready
+
+            canvasCtx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
+            canvasCtx.fillStyle = '#f0f0f0'; // Light gray background
+            canvasCtx.fillRect(0, 0, imageCanvas.width, imageCanvas.height);
+
+            if (!currentImage) {
+                drawInitialCanvasPlaceholder(); // Or just leave background if preferred
+                updateZoomButtons();
+                return;
+            }
+
+            // Calculate the dimensions of the portion of the source image to display
+            let sWidth = imageCanvas.width / zoomLevel;
+            let sHeight = imageCanvas.height / zoomLevel;
+
+            // Clamp panX and panY to keep the viewport within the source image boundaries
+            panX = Math.max(0, Math.min(panX, currentImage.width - sWidth));
+            panY = Math.max(0, Math.min(panY, currentImage.height - sHeight));
+            
+            // If image is smaller than viewport at current zoom, center it
+            let finalSX = panX, finalSY = panY;
+            let finalSWidth = sWidth, finalSHeight = sHeight;
+            let finalDX = 0, finalDY = 0;
+            let finalDWidth = imageCanvas.width, finalDHeight = imageCanvas.height;
+
+            if (currentImage.width * zoomLevel < imageCanvas.width) { // Image is effectively narrower
+                finalSWidth = currentImage.width; // Source uses full image width
+                finalSX = 0;
+                finalDWidth = currentImage.width * zoomLevel; // Drawn width is scaled image width
+                finalDX = (imageCanvas.width - finalDWidth) / 2; // Center horizontally
+            }
+            if (currentImage.height * zoomLevel < imageCanvas.height) { // Image is effectively shorter
+                finalSHeight = currentImage.height; // Source uses full image height
+                finalSY = 0;
+                finalDHeight = currentImage.height * zoomLevel; // Drawn height is scaled image height
+                finalDY = (imageCanvas.height - finalDHeight) / 2; // Center vertically
+            }
+            
+            // Prevent drawing outside image bounds if sWidth/sHeight were clamped due to pan
+            if (finalSX + finalSWidth > currentImage.width) finalSWidth = currentImage.width - finalSX;
+            if (finalSY + finalSHeight > currentImage.height) finalSHeight = currentImage.height - finalSY;
+
+
+            canvasCtx.drawImage(
+                currentImage,
+                finalSX, finalSY, finalSWidth, finalSHeight,
+                finalDX, finalDY, finalDWidth, finalDHeight
+            );
+            updateZoomButtons();
+        }
+        
+        function handleZoomIn() {
+            if (!currentImage) return;
+            const newZoomLevel = Math.min(MAX_ZOOM, zoomLevel * ZOOM_SENSITIVITY);
+            applyZoom(newZoomLevel);
+        }
+
+        function handleZoomOut() {
+            if (!currentImage) return;
+            // Allow zooming out slightly beyond initial fit, but not less than MIN_ZOOM
+            const newZoomLevel = Math.max(MIN_ZOOM, zoomLevel / ZOOM_SENSITIVITY);
+            applyZoom(newZoomLevel);
+        }
+        
+        function applyZoom(newZoomLevel) {
+            if (!currentImage || !imageCanvas.width || !imageCanvas.height) return;
+
+            // Calculate center of current view on the source image
+            const currentViewCenterX = panX + (imageCanvas.width / zoomLevel) / 2;
+            const currentViewCenterY = panY + (imageCanvas.height / zoomLevel) / 2;
+
+            zoomLevel = newZoomLevel;
+
+            // Adjust pan to keep the same center point
+            panX = currentViewCenterX - (imageCanvas.width / zoomLevel) / 2;
+            panY = currentViewCenterY - (imageCanvas.height / zoomLevel) / 2;
+            
+            redrawImageWithZoomAndPan();
+        }
+
+        function handleResetZoom() {
+            if (!currentImage) return;
+            calculateInitialZoomAndPan(); // Resets zoomLevel to initialFitZoom and panX/Y to 0
+            redrawImageWithZoomAndPan();
+        }
+
+        function updateZoomButtons() {
+            const hasImage = !!currentImage;
+            zoomInButton.disabled = !hasImage || zoomLevel >= MAX_ZOOM;
+            zoomOutButton.disabled = !hasImage || zoomLevel <= MIN_ZOOM; // Or zoomLevel <= initialFitZoom if we don't want to zoom out further
+            resetZoomButton.disabled = !hasImage;
+        }
+
+        function getEventPosition(event) {
+            const rect = imageCanvas.getBoundingClientRect();
+            if (event.touches && event.touches.length > 0) {
+                return { x: event.touches[0].clientX - rect.left, y: event.touches[0].clientY - rect.top };
+            }
+            return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+        }
+
+        function startPan(event) {
+            if (!currentImage || zoomLevel <= initialFitZoom + 0.01) { // Allow panning only if significantly zoomed in
+                isPanning = false;
+                return;
+            }
+            if (event.cancelable) event.preventDefault(); // Prevent page scroll on touch
+            isPanning = true;
+            lastPanPosition = getEventPosition(event);
+            imageCanvas.style.cursor = 'grabbing';
+        }
+
+        function panImage(event) {
+            if (!isPanning || !currentImage) return;
+            if (event.cancelable) event.preventDefault();
+
+            const currentPosition = getEventPosition(event);
+            const deltaX = currentPosition.x - lastPanPosition.x;
+            const deltaY = currentPosition.y - lastPanPosition.y;
+
+            panX -= deltaX / zoomLevel;
+            panY -= deltaY / zoomLevel;
+
+            lastPanPosition = currentPosition;
+            redrawImageWithZoomAndPan();
+        }
+
+        function endPan() {
+            if (!isPanning) return;
+            isPanning = false;
+            imageCanvas.style.cursor = 'crosshair';
         }
 
 
         // --- Color Picking ---
         function handleCanvasClick(event) {
-            if (!currentImage) {
-                // Do not show alert if camera view is active, as user might be trying to interact with that
-                if (cameraView.classList.contains('hidden')) {
-                    alertUser("Please upload an image or take a photo first.");
-                }
-                return;
+            if (isPanning || !currentImage) return; // Don't pick color if panning action just ended or no image
+
+            const pos = getEventPosition(event);
+            const x = pos.x;
+            const y = pos.y;
+
+            // Check if click is within the drawn image area on canvas, especially if image is centered and smaller than canvas
+            let drawnImageRect = { x:0, y:0, width: imageCanvas.width, height: imageCanvas.height };
+            if (currentImage.width * zoomLevel < imageCanvas.width) {
+                drawnImageRect.width = currentImage.width * zoomLevel;
+                drawnImageRect.x = (imageCanvas.width - drawnImageRect.width) / 2;
+            }
+            if (currentImage.height * zoomLevel < imageCanvas.height) {
+                drawnImageRect.height = currentImage.height * zoomLevel;
+                drawnImageRect.y = (imageCanvas.height - drawnImageRect.height) / 2;
             }
 
-            const rect = imageCanvas.getBoundingClientRect();
-            const x = event.clientX - rect.left;
-            const y = event.clientY - rect.top;
-
-            if (x < 0 || x >= imageCanvas.width || y < 0 || y >= imageCanvas.height) {
+            if (x < drawnImageRect.x || x > drawnImageRect.x + drawnImageRect.width ||
+                y < drawnImageRect.y || y > drawnImageRect.y + drawnImageRect.height) {
+                // Clicked outside the actual image area (e.g., on the gray background)
                 return;
             }
 
@@ -358,242 +543,63 @@
                         <p class="font-semibold text-gray-800">RGB: (${selectedRgb.r}, ${selectedRgb.g}, ${selectedRgb.b})</p>
                         <p class="text-sm text-gray-600">Hex: #${rgbToHex(selectedRgb.r, selectedRgb.g, selectedRgb.b)}</p>
                     </div>
-                </div>
-            `;
+                </div>`;
             findMixButton.disabled = false;
             mixingResult.innerHTML = '<p class="text-gray-500">Click "Find Paint Mix" to get suggestions.</p>';
         }
 
-        // --- Color Mixing Logic ---
+        // --- Color Mixing Logic (simplified, remains the same) ---
         async function handleFindMix() {
-            if (!selectedRgb) {
-                alertUser("Please select a color from the image first.");
-                return;
-            }
-
+            if (!selectedRgb) { alertUser("Please select a color from the image first."); return; }
             showLoadingModal(true);
             mixingResult.innerHTML = '<p class="text-gray-600">Calculating best mix...</p>';
-
-            await new Promise(resolve => setTimeout(resolve, 50)); // Allow UI to update
-
+            await new Promise(resolve => setTimeout(resolve, 50));
             try {
                 const bestMix = findClosestPaintMix(selectedRgb);
                 displayMixResult(bestMix);
             } catch (error) {
                 console.error("Error finding mix:", error);
-                mixingResult.innerHTML = '<p class="text-red-500">Error calculating mix. Please try again.</p>';
+                mixingResult.innerHTML = '<p class="text-red-500">Error calculating mix.</p>';
                 alertUser(`An error occurred: ${error.message}`);
-            } finally {
-                showLoadingModal(false);
-            }
+            } finally { showLoadingModal(false); }
         }
-
-        function colorDiff(rgb1, rgb2) {
-            const dr = rgb1.r - rgb2.r;
-            const dg = rgb1.g - rgb2.g;
-            const db = rgb1.b - rgb2.b;
-            return Math.sqrt(dr * dr + dg * dg + db * db);
-        }
-
-        function mixTwoColors(color1, ratio1, color2, ratio2) {
-            const totalRatio = ratio1 + ratio2;
-            if (totalRatio === 0) return { r: 0, g: 0, b: 0 };
-            return {
-                r: Math.round((color1.rgb.r * ratio1 + color2.rgb.r * ratio2) / totalRatio),
-                g: Math.round((color1.rgb.g * ratio1 + color2.rgb.g * ratio2) / totalRatio),
-                b: Math.round((color1.rgb.b * ratio1 + color2.rgb.b * ratio2) / totalRatio)
-            };
-        }
-
-        function mixThreeColors(color1, ratio1, color2, ratio2, color3, ratio3) {
-            const totalRatio = ratio1 + ratio2 + ratio3;
-            if (totalRatio === 0) return { r: 0, g: 0, b: 0 };
-            return {
-                r: Math.round((color1.rgb.r * ratio1 + color2.rgb.r * ratio2 + color3.rgb.r * ratio3) / totalRatio),
-                g: Math.round((color1.rgb.g * ratio1 + color2.rgb.g * ratio2 + color3.rgb.g * ratio3) / totalRatio),
-                b: Math.round((color1.rgb.b * ratio1 + color2.rgb.b * ratio2 + color3.rgb.b * ratio3) / totalRatio)
-            };
-        }
-
+        function colorDiff(rgb1, rgb2) { /* ... */ const dr = rgb1.r - rgb2.r; const dg = rgb1.g - rgb2.g; const db = rgb1.b - rgb2.b; return Math.sqrt(dr * dr + dg * dg + db * db); }
+        function mixTwoColors(c1, r1, c2, r2) { /* ... */ const t = r1+r2; if(t===0)return{r:0,g:0,b:0}; return {r:Math.round((c1.rgb.r*r1+c2.rgb.r*r2)/t), g:Math.round((c1.rgb.g*r1+c2.rgb.g*r2)/t), b:Math.round((c1.rgb.b*r1+c2.rgb.b*r2)/t)};}
+        function mixThreeColors(c1,r1,c2,r2,c3,r3){ /* ... */ const t=r1+r2+r3; if(t===0)return{r:0,g:0,b:0}; return {r:Math.round((c1.rgb.r*r1+c2.rgb.r*r2+c3.rgb.r*r3)/t),g:Math.round((c1.rgb.g*r1+c2.rgb.g*r2+c3.rgb.g*r3)/t),b:Math.round((c1.rgb.b*r1+c2.rgb.b*r2+c3.rgb.b*r3)/t)};}
         function findClosestPaintMix(targetRgb) {
             let bestMatch = { paintNames: [], mixedRgb: null, diff: Infinity, recipe: "" };
-
-            // 1. Check single paints
-            for (const paint of WINSOR_NEWTON_ACRYLICS) {
-                const diff = colorDiff(targetRgb, paint.rgb);
-                if (diff < bestMatch.diff) {
-                    bestMatch = { paintNames: [paint.name], mixedRgb: paint.rgb, diff: diff, recipe: `1 part ${paint.name}` };
-                }
-            }
-
-            // 2. Check two-paint mixes
-            const ratios = [ { r1: 1, r2: 3 }, { r1: 1, r2: 2 }, { r1: 1, r2: 1 }, { r1: 2, r2: 1 }, { r1: 3, r2: 1 } ];
-            for (let i = 0; i < WINSOR_NEWTON_ACRYLICS.length; i++) {
-                for (let j = i + 1; j < WINSOR_NEWTON_ACRYLICS.length; j++) {
-                    const p1 = WINSOR_NEWTON_ACRYLICS[i];
-                    const p2 = WINSOR_NEWTON_ACRYLICS[j];
-                    for (const ratio of ratios) {
-                        let mixed = mixTwoColors(p1, ratio.r1, p2, ratio.r2);
-                        let d = colorDiff(targetRgb, mixed);
-                        if (d < bestMatch.diff) {
-                            bestMatch = { paintNames: [p1.name, p2.name], mixedRgb: mixed, diff: d, recipe: `${ratio.r1} part(s) ${p1.name} + ${ratio.r2} part(s) ${p2.name}` };
+            WINSOR_NEWTON_ACRYLICS.forEach(p => { const d = colorDiff(targetRgb, p.rgb); if (d < bestMatch.diff) bestMatch = { paintNames: [p.name], mixedRgb: p.rgb, diff: d, recipe: `1 part ${p.name}` }; });
+            const ratios = [{r1:1,r2:3},{r1:1,r2:2},{r1:1,r2:1},{r1:2,r2:1},{r1:3,r2:1}];
+            for(let i=0;i<WINSOR_NEWTON_ACRYLICS.length;i++){ for(let j=i+1;j<WINSOR_NEWTON_ACRYLICS.length;j++){
+                const p1=WINSOR_NEWTON_ACRYLICS[i], p2=WINSOR_NEWTON_ACRYLICS[j];
+                ratios.forEach(r => {
+                    [{c1:p1,rat1:r.r1,c2:p2,rat2:r.r2}, {c1:p1,rat1:r.r2,c2:p2,rat2:r.r1}].forEach(o => {
+                        if (o.rat1 === r.r1 && o.rat2 === r.r2 && r.r1 === r.r2 && o.c1 === p1 && o.c2 === p2) { /* skip redundant for 1:1 and same order */ } else {
+                            const m=mixTwoColors(o.c1,o.rat1,o.c2,o.rat2), d=colorDiff(targetRgb,m);
+                            if(d<bestMatch.diff) bestMatch={paintNames:[o.c1.name,o.c2.name],mixedRgb:m,diff:d,recipe:`${o.rat1} part(s) ${o.c1.name} + ${o.rat2} part(s) ${o.c2.name}`};
                         }
-                        if (ratio.r1 !== ratio.r2) { // Try swapped if ratios are different
-                            mixed = mixTwoColors(p1, ratio.r2, p2, ratio.r1);
-                            d = colorDiff(targetRgb, mixed);
-                            if (d < bestMatch.diff) {
-                                bestMatch = { paintNames: [p1.name, p2.name], mixedRgb: mixed, diff: d, recipe: `${ratio.r2} part(s) ${p1.name} + ${ratio.r1} part(s) ${p2.name}` };
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // 3. Check three-paint mixes
-            if (WINSOR_NEWTON_ACRYLICS.length >= 3) {
-                for (let i = 0; i < WINSOR_NEWTON_ACRYLICS.length; i++) {
-                    for (let j = i + 1; j < WINSOR_NEWTON_ACRYLICS.length; j++) {
-                        for (let k = j + 1; k < WINSOR_NEWTON_ACRYLICS.length; k++) {
-                            const p1 = WINSOR_NEWTON_ACRYLICS[i];
-                            const p2 = WINSOR_NEWTON_ACRYLICS[j];
-                            const p3 = WINSOR_NEWTON_ACRYLICS[k];
-                            
-                            // Equal parts
-                            let mixed = mixThreeColors(p1, 1, p2, 1, p3, 1);
-                            let d = colorDiff(targetRgb, mixed);
-                            if (d < bestMatch.diff) {
-                                bestMatch = { paintNames: [p1.name, p2.name, p3.name], mixedRgb: mixed, diff: d, recipe: `1 part ${p1.name} + 1 part ${p2.name} + 1 part ${p3.name} (approx. equal parts)` };
-                            }
-
-                            // Dominant mixes
-                            const dominantRatios = [ {r1:2, r2:1, r3:1}, {r1:1, r2:2, r3:1}, {r1:1, r2:1, r3:2} ];
-                            for (const dr of dominantRatios) {
-                                mixed = mixThreeColors(p1, dr.r1, p2, dr.r2, p3, dr.r3);
-                                d = colorDiff(targetRgb, mixed);
-                                if (d < bestMatch.diff) {
-                                     bestMatch = { paintNames: [p1.name, p2.name, p3.name], mixedRgb: mixed, diff: d, recipe: `${dr.r1} part(s) ${p1.name} + ${dr.r2} part(s) ${p2.name} + ${dr.r3} part(s) ${p3.name}` };
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+                    });
+                });
+            }}
+            if(WINSOR_NEWTON_ACRYLICS.length>=3){ for(let i=0;i<WINSOR_NEWTON_ACRYLICS.length;i++){ for(let j=i+1;j<WINSOR_NEWTON_ACRYLICS.length;j++){ for(let k=j+1;k<WINSOR_NEWTON_ACRYLICS.length;k++){
+                const p1=WINSOR_NEWTON_ACRYLICS[i],p2=WINSOR_NEWTON_ACRYLICS[j],p3=WINSOR_NEWTON_ACRYLICS[k];
+                [{r1:1,r2:1,r3:1},{r1:2,r2:1,r3:1},{r1:1,r2:2,r3:1},{r1:1,r2:1,r3:2}].forEach(r=>{
+                    const m=mixThreeColors(p1,r.r1,p2,r.r2,p3,r.r3), d=colorDiff(targetRgb,m);
+                    if(d<bestMatch.diff) bestMatch={paintNames:[p1.name,p2.name,p3.name],mixedRgb:m,diff:d,recipe:`${r.r1}p ${p1.name} + ${r.r2}p ${p2.name} + ${r.r3}p ${p3.name}`.replace(/1p/g, '1 part')};
+                });
+            }}}}
             return bestMatch;
         }
-
-        function displayMixResult(mix) {
-            if (!mix || !mix.mixedRgb) {
-                mixingResult.innerHTML = '<p class="text-red-500">Could not find a suitable mix.</p>';
-                return;
-            }
-            let paintSwatchesHTML = '';
-            if (mix.paintNames && mix.paintNames.length > 0) {
-                mix.paintNames.forEach(name => {
-                    const paintData = WINSOR_NEWTON_ACRYLICS.find(p => p.name === name);
-                    if (paintData) {
-                        paintSwatchesHTML += `<span class="paint-swatch" style="background-color: rgb(${paintData.rgb.r}, ${paintData.rgb.g}, ${paintData.rgb.b});" title="${name}"></span>`;
-                    }
-                });
-            }
-            mixingResult.innerHTML = `
-                <div class="flex items-center mb-3">
-                    <span class="color-swatch mr-3" style="background-color: rgb(${mix.mixedRgb.r}, ${mix.mixedRgb.g}, ${mix.mixedRgb.b});"></span>
-                    <div>
-                        <p class="font-semibold text-gray-800">Closest Mix Found (RGB: ${mix.mixedRgb.r}, ${mix.mixedRgb.g}, ${mix.mixedRgb.b})</p>
-                        <p class="text-sm text-gray-600">Color Difference Score: ${mix.diff.toFixed(2)} (lower is better)</p>
-                    </div>
-                </div>
-                <p class="text-gray-700 font-medium mb-1">Recipe:</p>
-                <div class="flex items-center mb-2"> ${paintSwatchesHTML} </div>
-                <p class="text-gray-700 bg-gray-100 p-2 rounded">${mix.recipe}</p>
-            `;
-        }
+        function displayMixResult(mix) { /* ... */ if (!mix || !mix.mixedRgb) { mixingResult.innerHTML = '<p class="text-red-500">Could not find mix.</p>'; return; } let swHTML = ''; if (mix.paintNames) mix.paintNames.forEach(n => { const p = WINSOR_NEWTON_ACRYLICS.find(paint => paint.name === n); if (p) swHTML += `<span class="paint-swatch" style="background-color: rgb(${p.rgb.r},${p.rgb.g},${p.rgb.b});" title="${n}"></span>`; }); mixingResult.innerHTML = `<div class="flex items-center mb-3"><span class="color-swatch mr-3" style="background-color: rgb(${mix.mixedRgb.r},${mix.mixedRgb.g},${mix.mixedRgb.b});"></span><div><p class="font-semibold text-gray-800">Closest Mix (RGB: ${mix.mixedRgb.r},${mix.mixedRgb.g},${mix.mixedRgb.b})</p><p class="text-sm text-gray-600">Difference: ${mix.diff.toFixed(2)}</p></div></div><p class="text-gray-700 font-medium mb-1">Recipe:</p><div class="flex items-center mb-2">${swHTML}</div><p class="text-gray-700 bg-gray-100 p-2 rounded">${mix.recipe}</p>`;}
 
         // --- Utility Functions ---
-        function componentToHex(c) {
-            const hex = c.toString(16);
-            return hex.length == 1 ? "0" + hex : hex;
-        }
-        function rgbToHex(r, g, b) {
-            return componentToHex(r) + componentToHex(g) + componentToHex(b);
-        }
-        function showLoadingModal(show) {
-            loadingModal.style.display = show ? "block" : "none";
-        }
-        function alertUser(message) {
-            let existingModal = document.getElementById('alertModal');
-            if (existingModal) existingModal.remove();
-            const alertModal = document.createElement('div');
-            alertModal.id = 'alertModal';
-            alertModal.className = 'modal';
-            alertModal.style.display = 'block';
-            const modalContent = document.createElement('div');
-            modalContent.className = 'modal-content';
-            const closeButton = document.createElement('span');
-            closeButton.className = 'modal-close-button';
-            closeButton.innerHTML = '&times;';
-            closeButton.onclick = () => { alertModal.style.display = 'none'; alertModal.remove(); };
-            const messageP = document.createElement('p');
-            messageP.textContent = message;
-            messageP.className = 'text-gray-700 my-4';
-            const okButton = document.createElement('button');
-            okButton.textContent = 'OK';
-            okButton.className = 'bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-6 rounded-lg';
-            okButton.onclick = () => { alertModal.style.display = 'none'; alertModal.remove(); };
-            modalContent.appendChild(closeButton);
-            modalContent.appendChild(messageP);
-            modalContent.appendChild(okButton);
-            alertModal.appendChild(modalContent);
-            document.body.appendChild(alertModal);
-        }
-
-        // Initial canvas placeholder
-        function drawInitialCanvasPlaceholder() {
-            const parentWidth = imageCanvas.parentElement.clientWidth;
-            imageCanvas.width = (parentWidth && parentWidth > 0) ? Math.min(parentWidth, 500) : 300;
-            imageCanvas.height = imageCanvas.width * (2/3);
-            canvasCtx.fillStyle = '#e5e7eb';
-            canvasCtx.fillRect(0, 0, imageCanvas.width, imageCanvas.height);
-            canvasCtx.fillStyle = '#9ca3af';
-            canvasCtx.textAlign = 'center';
-            canvasCtx.textBaseline = 'middle';
-            canvasCtx.font = '14px Inter';
-            wrapText(canvasCtx, 'Upload an image or use camera to begin', imageCanvas.width / 2, imageCanvas.height / 2, imageCanvas.width - 20, 18);
-            canvasHelperText.textContent = 'Upload an image or use camera to begin.';
-        }
-        function wrapText(context, text, x, y, maxWidth, lineHeight) {
-            const words = text.split(' ');
-            let line = '';
-            for(let n = 0; n < words.length; n++) {
-                const testLine = line + words[n] + ' ';
-                const metrics = context.measureText(testLine);
-                const testWidth = metrics.width;
-                if (testWidth > maxWidth && n > 0) {
-                    context.fillText(line, x, y);
-                    line = words[n] + ' ';
-                    y += lineHeight;
-                } else { line = testLine; }
-            }
-            context.fillText(line, x, y);
-        }
+        function componentToHex(c){const h=c.toString(16);return h.length==1?"0"+h:h;} function rgbToHex(r,g,b){return componentToHex(r)+componentToHex(g)+componentToHex(b);}
+        function showLoadingModal(show){loadingModal.style.display=show?"block":"none";}
+        function alertUser(message){let eM=document.getElementById('alertModal');if(eM)eM.remove();const aM=document.createElement('div');aM.id='alertModal';aM.className='modal';aM.style.display='block';const mC=document.createElement('div');mC.className='modal-content';const cB=document.createElement('span');cB.className='modal-close-button';cB.innerHTML='&times;';cB.onclick=()=>{aM.style.display='none';aM.remove();};const mP=document.createElement('p');mP.textContent=message;mP.className='text-gray-700 my-4';const oB=document.createElement('button');oB.textContent='OK';oB.className='bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-6 rounded-lg';oB.onclick=()=>{aM.style.display='none';aM.remove();};mC.appendChild(cB);mC.appendChild(mP);mC.appendChild(oB);aM.appendChild(mC);document.body.appendChild(aM);}
+        function wrapText(ctx,text,x,y,maxW,lH){const w=text.split(' ');let l='';for(let i=0;i<w.length;i++){const tL=l+w[i]+' ';const mW=ctx.measureText(tL).width;if(mW>maxW&&i>0){ctx.fillText(l,x,y);l=w[i]+' ';y+=lH;}else{l=tL;}}ctx.fillText(l,x,y);}
 
         // Call on load
         drawInitialCanvasPlaceholder();
-        // Adjust canvas on resize
-        window.addEventListener('resize', () => {
-            if (!currentImage && cameraView.classList.contains('hidden')) {
-                 drawInitialCanvasPlaceholder();
-            } else if (currentImage) {
-                // Redraw current image to fit new size
-                const parentWidth = imageCanvas.parentElement.clientWidth;
-                const maxWidth = (parentWidth && parentWidth > 0) ? Math.min(parentWidth, 500) : 500;
-                const scale = Math.min(maxWidth / currentImage.width, 1);
-                imageCanvas.width = currentImage.width * scale;
-                imageCanvas.height = currentImage.height * scale;
-                canvasCtx.drawImage(currentImage, 0, 0, imageCanvas.width, imageCanvas.height);
-            }
-            // If camera is active, the video element will handle its own responsiveness.
-        });
 
     </script>
 </body>
