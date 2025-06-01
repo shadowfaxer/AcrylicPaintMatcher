@@ -16,20 +16,21 @@ const WINSOR_NEWTON_ACRYLICS = [
             { name: "Pro Mixing White", rgb: { r: 225, g: 223, b: 218 } },
         ];
 
-        const WINSOR_NEWTON_ACRYLICS = [
-            { name: "Titanium White", rgb: { r: 248, g: 249, b: 250 } },
-            { name: "Ivory Black", rgb: { r: 35, g: 35, b: 35 } },
-            { name: "Cadmium Yellow Medium Hue", rgb: { r: 255, g: 215, b: 0 } },
-            { name: "Lemon Yellow Hue", rgb: { r: 255, g: 245, b: 100 } },
-            { name: "Cadmium Red Hue", rgb: { r: 220, g: 20, b: 60 } },
-            { name: "Permanent Rose", rgb: { r: 227, g: 69, b: 139 } },
-            { name: "Ultramarine", rgb: { r: 25, g: 40, b: 140 } },
-            { name: "Cerulean Blue Hue", rgb: { r: 60, g: 150, b: 220 } },
-            { name: "Phthalo Green (Blue Shade)", rgb: { r: 0, g: 105, b: 90 } },
-            { name: "Permanent Green Light", rgb: { r: 80, g: 180, b: 70 } },
-            { name: "Yellow Ochre", rgb: { r: 204, g: 153, b: 51 } },
-            { name: "Burnt Sienna", rgb: { r: 138, g: 54, b: 15 } },
-            { name: "Raw Umber", rgb: { r: 90, g: 70, b: 50 } },
-            { name: "Dioxazine Purple", rgb: { r: 80, g: 40, b: 120 } },
-            { name: "Pale Olive", rgb: { r: 150, g: 155, b: 100 } }
-        ];
+// Original colours used by Gemini
+// const WINSOR_NEWTON_ACRYLICS = [
+        //     { name: "Titanium White", rgb: { r: 248, g: 249, b: 250 } },
+        //     { name: "Ivory Black", rgb: { r: 35, g: 35, b: 35 } },
+        //     { name: "Cadmium Yellow Medium Hue", rgb: { r: 255, g: 215, b: 0 } },
+        //     { name: "Lemon Yellow Hue", rgb: { r: 255, g: 245, b: 100 } },
+        //     { name: "Cadmium Red Hue", rgb: { r: 220, g: 20, b: 60 } },
+        //     { name: "Permanent Rose", rgb: { r: 227, g: 69, b: 139 } },
+        //     { name: "Ultramarine", rgb: { r: 25, g: 40, b: 140 } },
+        //     { name: "Cerulean Blue Hue", rgb: { r: 60, g: 150, b: 220 } },
+        //     { name: "Phthalo Green (Blue Shade)", rgb: { r: 0, g: 105, b: 90 } },
+        //     { name: "Permanent Green Light", rgb: { r: 80, g: 180, b: 70 } },
+        //     { name: "Yellow Ochre", rgb: { r: 204, g: 153, b: 51 } },
+        //     { name: "Burnt Sienna", rgb: { r: 138, g: 54, b: 15 } },
+        //     { name: "Raw Umber", rgb: { r: 90, g: 70, b: 50 } },
+        //     { name: "Dioxazine Purple", rgb: { r: 80, g: 40, b: 120 } },
+        //     { name: "Pale Olive", rgb: { r: 150, g: 155, b: 100 } }
+        // ];
