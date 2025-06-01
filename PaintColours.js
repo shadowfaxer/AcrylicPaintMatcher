@@ -9,7 +9,7 @@ const WINSOR_NEWTON_ACRYLICS = [
             { name: "Galeria Permanent Alizarin Crimson", rgb: { r: 137, g: 11, b: 24 } }, //rgb(137, 11, 24)
             { name: "Pro Cerulean Blue", rgb: { r: 1, g: 100, b: 184 } }, //rgb(1, 100, 184)
             { name: "Pro Phthalo Blue (Green Shade)", rgb: { r: 21, g: 26, b: 52 } },
-            { name: "Galeria Permanent Alizarin Crimson", rgb: { r: 143, g: 11, b: 25 } },
+            { name: "Phthalo Blue", rgb: { r: 6, g: 2, b: 5 } }, //rgb(6, 2, 5)
             { name: "Pro Phthalo Blue (Red Shade)", rgb: { r: 27, g: 28, b: 49 } },
             { name: "Pro Ultramarine Blue", rgb: { r: 2, g: 38, b: 150 } },
             { name: "Galeria Payne's Gray", rgb: { r: 32, g: 34, b: 38 } },
