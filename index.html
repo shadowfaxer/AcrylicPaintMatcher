@@ -139,7 +139,7 @@
             </div>
         </div>
         <div class="mt-6 p-3 bg-yellow-50 border border-yellow-300 rounded-lg text-yellow-700 text-xs">
-            <p><strong>Disclaimer:</strong> Paint data and mixing simulations are approximations. Actual paint mixing results may vary.</p>
+            <p><strong>Disclaimer:</strong> Paint data, opacity values, and mixing simulations are approximations. Actual paint mixing results may vary.</p>
         </div>
     </div>
 
@@ -167,38 +167,96 @@
 
         let stream = null;
         let currentImage = null;
-        let selectedRgb = null;
+        let selectedRgb = null; // Stores the RGB of the color picked from the image
+        let targetLab = null; // Stores the LAB version of selectedRgb
 
         // --- Zoom and Pan State ---
         let zoomLevel = 1.0;
-        let initialFitZoom = 1.0; // Zoom level to fit the image initially
+        let initialFitZoom = 1.0;
         let panX = 0;
         let panY = 0;
         let isPanning = false;
         let lastPanPosition = { x: 0, y: 0 };
-        const MIN_ZOOM = 0.1; // Minimum zoom level
-        const MAX_ZOOM = 10.0; // Maximum zoom level
+        const MIN_ZOOM = 0.1;
+        const MAX_ZOOM = 10.0;
         const ZOOM_SENSITIVITY = 1.2;
 
+        // --- CIELAB Color Conversion Constants ---
+        // D65 illuminant (standard for sRGB)
+        const D65_X = 95.047;
+        const D65_Y = 100.0;
+        const D65_Z = 108.883;
 
-        // --- Paint Database (From User Provided File - Updated) ---
-        const WINSOR_NEWTON_ACRYLICS = [
-            { name: "Pro Titanium White", rgb: { r: 223, g: 221, b: 217 } }, //rgb(223, 221, 217)
-            { name: "Pro Cadmium Yellow Light", rgb: { r: 222, g: 194, b: 3 } }, //rgb(222, 194, 3)
-            { name: "Galeria Cadmium Yellow Medium Hue", rgb: { r: 249, g: 197, b: 0 } }, //rgb(249, 197, 0)
-            { name: "Galeria Yellow Ochre", rgb: { r: 166, g: 115, b: 19 } }, //rgb(166, 115, 19)
-            { name: "Pro Raw Sienna", rgb: { r: 122, g: 81, b: 46 } }, //rgb(122, 81, 46)
-            { name: "Galeria Raw Sienna", rgb: { r: 114, g: 61, b: 23 } }, //rgb(114, 61, 23)
-            { name: "Pro Cadmium Red Light", rgb: { r: 217, g: 53, b: 28 } }, //rgb(217, 53, 28)
-            { name: "Galeria Permanent Alizarin Crimson", rgb: { r: 137, g: 11, b: 24 } }, //rgb(137, 11, 24)
-            { name: "Pro Cerulean Blue", rgb: { r: 1, g: 100, b: 184 } }, //rgb(1, 100, 184)
-            { name: "Pro Phthalo Blue (Green Shade)", rgb: { r: 21, g: 26, b: 52 } },
-            { name: "Galeria Phthalo Blue", rgb: { r: 6, g: 2, b: 5 } }, //rgb(6, 2, 5)
-            { name: "Pro Phthalo Blue (Red Shade)", rgb: { r: 27, g: 28, b: 49 } },
-            { name: "Pro Ultramarine Blue", rgb: { r: 2, g: 38, b: 150 } },
-            { name: "Galeria Payne's Gray", rgb: { r: 32, g: 34, b: 38 } },
-            { name: "Pro Mixing White", rgb: { r: 225, g: 223, b: 218 } },
+        // --- RGB to XYZ ---
+        function rgbToXyz(r, g, b) {
+            let R = r / 255;
+            let G = g / 255;
+            let B = b / 255;
+
+            R = (R > 0.04045) ? Math.pow((R + 0.055) / 1.055, 2.4) : R / 12.92;
+            G = (G > 0.04045) ? Math.pow((G + 0.055) / 1.055, 2.4) : G / 12.92;
+            B = (B > 0.04045) ? Math.pow((B + 0.055) / 1.055, 2.4) : B / 12.92;
+
+            R *= 100;
+            G *= 100;
+            B *= 100;
+
+            // Observer. = 2°, Illuminant = D65
+            const X = R * 0.4124564 + G * 0.3575761 + B * 0.1804375;
+            const Y = R * 0.2126729 + G * 0.7151522 + B * 0.0721750;
+            const Z = R * 0.0193339 + G * 0.1191920 + B * 0.9503041;
+            return { x: X, y: Y, z: Z };
+        }
+
+        // --- XYZ to CIELAB ---
+        function xyzToLab(x, y, z) {
+            let varX = x / D65_X;
+            let varY = y / D65_Y;
+            let varZ = z / D65_Z;
+
+            const F = t => (t > 0.008856) ? Math.pow(t, 1 / 3) : (7.787 * t) + (16 / 116);
+
+            varX = F(varX);
+            varY = F(varY);
+            varZ = F(varZ);
+
+            const L = (116 * varY) - 16;
+            const a = 500 * (varX - varY);
+            const b = 200 * (varY - varZ);
+            return { l: L, a: a, b: b };
+        }
+        
+        // --- RGB to CIELAB (convenience function) ---
+        function rgbToLab(rgb) {
+            const xyz = rgbToXyz(rgb.r, rgb.g, rgb.b);
+            return xyzToLab(xyz.x, xyz.y, xyz.z);
+        }
+
+
+        // --- Paint Database (with opacity from PDFs and pre-calculated LAB) ---
+        // Opacity mapping: Ο (Opaque) -> 1.0, SO (Semi-Opaque) -> 0.7, ST (Semi-Transparent) -> 0.4, T (Transparent) -> 0.1
+        const WINSOR_NEWTON_ACRYLICS_RAW = [
+            { name: "Pro Titanium White", rgb: { r: 223, g: 221, b: 217 }, opacity: 1.0 },
+            { name: "Pro Cadmium Yellow Light", rgb: { r: 222, g: 194, b: 3 }, opacity: 1.0 },
+            { name: "Galeria Cadmium Yellow Medium Hue", rgb: { r: 249, g: 197, b: 0 }, opacity: 0.7 },
+            { name: "Galeria Yellow Ochre", rgb: { r: 166, g: 115, b: 19 }, opacity: 1.0 },
+            { name: "Pro Raw Sienna", rgb: { r: 122, g: 81, b: 46 }, opacity: 0.1 }, // Pro PDF "Raw Sienna" is T
+            { name: "Galeria Raw Sienna", rgb: { r: 114, g: 61, b: 23 }, opacity: 0.1 }, // Galeria PDF "Raw Sienna" is T
+            { name: "Pro Cadmium Red Light", rgb: { r: 217, g: 53, b: 28 }, opacity: 1.0 },
+            { name: "Galeria Permanent Alizarin Crimson", rgb: { r: 137, g: 11, b: 24 }, opacity: 0.4 }, // Galeria PDF is ST
+            { name: "Pro Cerulean Blue", rgb: { r: 1, g: 100, b: 184 }, opacity: 1.0 },
+            { name: "Pro Phthalo Blue (Green Shade)", rgb: { r: 21, g: 26, b: 52 }, opacity: 0.1 }, // Pro PDF is T
+            { name: "Galeria Phthalo Blue", rgb: { r: 6, g: 2, b: 5 }, opacity: 0.1 }, // Galeria PDF "Phthalo Blue" is T
+            { name: "Pro Phthalo Blue (Red Shade)", rgb: { r: 27, g: 28, b: 49 }, opacity: 0.1 }, // Pro PDF is T
+            { name: "Pro Ultramarine Blue", rgb: { r: 2, g: 38, b: 150 }, opacity: 0.1 }, // Pro PDF is T
+            { name: "Galeria Payne's Gray", rgb: { r: 32, g: 34, b: 38 }, opacity: 0.7 }, // Galeria PDF is SO
+            { name: "Pro Mixing White", rgb: { r: 225, g: 223, b: 218 }, opacity: 0.7 }, // Pro PDF is SO
         ];
+
+        const WINSOR_NEWTON_ACRYLICS = WINSOR_NEWTON_ACRYLICS_RAW.map(paint => ({
+            ...paint,
+            lab: rgbToLab(paint.rgb) // Pre-calculate LAB values
+        }));
 
 
         // --- Event Listeners ---
@@ -211,8 +269,6 @@
         zoomInButton.addEventListener('click', handleZoomIn);
         zoomOutButton.addEventListener('click', handleZoomOut);
         resetZoomButton.addEventListener('click', handleResetZoom);
-
-        // Pan event listeners
         imageCanvas.addEventListener('mousedown', startPan);
         imageCanvas.addEventListener('mousemove', panImage);
         imageCanvas.addEventListener('mouseup', endPan);
@@ -222,319 +278,63 @@
         imageCanvas.addEventListener('touchend', endPan);
         imageCanvas.addEventListener('touchcancel', endPan);
 
-
         // --- Canvas Sizing and Initial Placeholder ---
-        function setCanvasDimensions() {
-            const parentElement = imageCanvas.parentElement;
-            if (!parentElement) return;
-            const parentWidth = parentElement.clientWidth;
-            imageCanvas.width = parentWidth > 0 ? parentWidth : 300; // Use full parent width
-            imageCanvas.height = imageCanvas.width * (2 / 3); // Maintain a 3:2 aspect ratio
-        }
-
-        function drawInitialCanvasPlaceholder() {
-            setCanvasDimensions(); // Ensure canvas dimensions are set
-            canvasCtx.fillStyle = '#e5e7eb'; // bg-gray-200
-            canvasCtx.fillRect(0, 0, imageCanvas.width, imageCanvas.height);
-            canvasCtx.fillStyle = '#9ca3af'; // text-gray-400
-            canvasCtx.textAlign = 'center';
-            canvasCtx.textBaseline = 'middle';
-            canvasCtx.font = '14px Inter';
-            wrapText(canvasCtx, 'Upload an image or use camera. Drag to pan when zoomed.', imageCanvas.width / 2, imageCanvas.height / 2, imageCanvas.width - 20, 18);
-            updateZoomButtons();
-        }
-        
-        window.addEventListener('resize', () => {
-            setCanvasDimensions();
-            if (currentImage) {
-                calculateInitialZoomAndPan(); // Recalculate fit zoom for new canvas size
-                redrawImageWithZoomAndPan();
-            } else {
-                drawInitialCanvasPlaceholder();
-            }
-        });
+        function setCanvasDimensions() { /* ... same as before ... */ const parentElement = imageCanvas.parentElement; if (!parentElement) return; const parentWidth = parentElement.clientWidth; imageCanvas.width = parentWidth > 0 ? parentWidth : 300; imageCanvas.height = imageCanvas.width * (2 / 3); }
+        function drawInitialCanvasPlaceholder() { /* ... same as before ... */ setCanvasDimensions(); canvasCtx.fillStyle = '#e5e7eb'; canvasCtx.fillRect(0, 0, imageCanvas.width, imageCanvas.height); canvasCtx.fillStyle = '#9ca3af'; canvasCtx.textAlign = 'center'; canvasCtx.textBaseline = 'middle'; canvasCtx.font = '14px Inter'; wrapText(canvasCtx, 'Upload an image or use camera. Drag to pan when zoomed.', imageCanvas.width / 2, imageCanvas.height / 2, imageCanvas.width - 20, 18); updateZoomButtons(); }
+        window.addEventListener('resize', () => { setCanvasDimensions(); if (currentImage) { calculateInitialZoomAndPan(); redrawImageWithZoomAndPan(); } else { drawInitialCanvasPlaceholder(); } });
 
         // --- Image Loading and Processing ---
         function loadImageOnCanvas(imageSrc) {
             currentImage = new Image();
             currentImage.onload = () => {
-                setCanvasDimensions(); // Ensure canvas dimensions are correct before calculating zoom
-                calculateInitialZoomAndPan();
-                redrawImageWithZoomAndPan();
-                
+                setCanvasDimensions(); calculateInitialZoomAndPan(); redrawImageWithZoomAndPan();
                 selectedColorInfo.innerHTML = '<span class="text-gray-500">Click image to pick color</span>';
-                selectedRgb = null;
+                selectedRgb = null; targetLab = null; // Reset LAB too
                 findMixButton.disabled = true;
                 mixingResult.innerHTML = '<p class="text-gray-500">Pick a color to see suggestions.</p>';
                 canvasHelperText.textContent = 'Click to pick color. Drag to pan when zoomed.';
-                
-                cameraView.classList.add('hidden');
-                imageInputSection.classList.remove('hidden');
-                stopCameraStream();
-                updateZoomButtons();
+                cameraView.classList.add('hidden'); imageInputSection.classList.remove('hidden');
+                stopCameraStream(); updateZoomButtons();
             };
             currentImage.onerror = () => {
-                canvasHelperText.textContent = 'Error loading image.';
-                alertUser('Error: Could not load the image. Please try again.');
-                currentImage = null; // Reset current image
-                updateZoomButtons(); // Disable zoom buttons
-                drawInitialCanvasPlaceholder(); // Show placeholder
+                canvasHelperText.textContent = 'Error loading image.'; alertUser('Error: Could not load the image.');
+                currentImage = null; updateZoomButtons(); drawInitialCanvasPlaceholder();
             };
             currentImage.src = imageSrc;
         }
-
-        function handleImageUpload(event) {
-            const file = event.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (e) => loadImageOnCanvas(e.target.result);
-                reader.readAsDataURL(file);
-            }
-        }
+        function handleImageUpload(event) { /* ... same as before ... */ const file = event.target.files[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => loadImageOnCanvas(e.target.result); reader.readAsDataURL(file); } }
 
         // --- Camera Handling ---
-        async function startCamera() {
-            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                try {
-                    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-                    cameraStreamElement.srcObject = stream;
-                    imageInputSection.classList.add('hidden');
-                    cameraView.classList.remove('hidden');
-                    canvasHelperText.textContent = 'Position camera and take photo.';
-                } catch (err) {
-                    try { // Fallback
-                        stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                        cameraStreamElement.srcObject = stream;
-                        imageInputSection.classList.add('hidden');
-                        cameraView.classList.remove('hidden');
-                    } catch (fallbackErr) {
-                         alertUser("Could not access camera. Ensure permissions are granted.");
-                         cancelCamera(); // Revert UI
-                    }
-                }
-            } else {
-                alertUser("Camera API not supported. Please upload a file.");
-            }
-        }
-
-        function takePhoto() {
-            if (!stream || !cameraStreamElement.videoWidth) {
-                alertUser("Camera not ready."); return;
-            }
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = cameraStreamElement.videoWidth;
-            tempCanvas.height = cameraStreamElement.videoHeight;
-            tempCanvas.getContext('2d').drawImage(cameraStreamElement, 0, 0, tempCanvas.width, tempCanvas.height);
-            loadImageOnCanvas(tempCanvas.toDataURL('image/png'));
-        }
-
-        function stopCameraStream() {
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-                stream = null;
-                cameraStreamElement.srcObject = null;
-            }
-        }
-
-        function cancelCamera() {
-            stopCameraStream();
-            cameraView.classList.add('hidden');
-            imageInputSection.classList.remove('hidden');
-            if (!currentImage) {
-                 drawInitialCanvasPlaceholder();
-                 canvasHelperText.textContent = 'Upload an image or use camera. Drag to pan when zoomed.';
-            } else {
-                 canvasHelperText.textContent = 'Click to pick color. Drag to pan when zoomed.';
-            }
-        }
+        async function startCamera() { /* ... same as before ... */ if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) { try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }); cameraStreamElement.srcObject = stream; imageInputSection.classList.add('hidden'); cameraView.classList.remove('hidden'); canvasHelperText.textContent = 'Position camera and take photo.'; } catch (err) { try { stream = await navigator.mediaDevices.getUserMedia({ video: true }); cameraStreamElement.srcObject = stream; imageInputSection.classList.add('hidden'); cameraView.classList.remove('hidden'); } catch (fallbackErr) { alertUser("Could not access camera. Ensure permissions are granted."); cancelCamera(); } } } else { alertUser("Camera API not supported."); } }
+        function takePhoto() { /* ... same as before ... */ if (!stream || !cameraStreamElement.videoWidth) { alertUser("Camera not ready."); return; } const tempCanvas = document.createElement('canvas'); tempCanvas.width = cameraStreamElement.videoWidth; tempCanvas.height = cameraStreamElement.videoHeight; tempCanvas.getContext('2d').drawImage(cameraStreamElement, 0, 0, tempCanvas.width, tempCanvas.height); loadImageOnCanvas(tempCanvas.toDataURL('image/png')); }
+        function stopCameraStream() { /* ... same as before ... */ if (stream) { stream.getTracks().forEach(track => track.stop()); stream = null; cameraStreamElement.srcObject = null; } }
+        function cancelCamera() { /* ... same as before ... */ stopCameraStream(); cameraView.classList.add('hidden'); imageInputSection.classList.remove('hidden'); if (!currentImage) { drawInitialCanvasPlaceholder(); canvasHelperText.textContent = 'Upload an image or use camera. Drag to pan when zoomed.'; } else { canvasHelperText.textContent = 'Click to pick color. Drag to pan when zoomed.'; } }
 
         // --- Zoom and Pan Logic ---
-        function calculateInitialZoomAndPan() {
-            if (!currentImage || !imageCanvas.width || !imageCanvas.height || imageCanvas.width === 0 || imageCanvas.height === 0) {
-                initialFitZoom = 1.0;
-                zoomLevel = 1.0;
-                panX = 0;
-                panY = 0;
-                return;
-            }
-            const canvasAspect = imageCanvas.width / imageCanvas.height;
-            const imageAspect = currentImage.width / currentImage.height;
-
-            if (imageAspect > canvasAspect) { // Image is wider than canvas aspect ratio
-                initialFitZoom = imageCanvas.width / currentImage.width;
-            } else { // Image is taller or same aspect ratio
-                initialFitZoom = imageCanvas.height / currentImage.height;
-            }
-            initialFitZoom = Math.max(MIN_ZOOM, initialFitZoom); // Ensure not too small
-
-            zoomLevel = initialFitZoom;
-            panX = 0; // Centering is handled by redrawImageWithZoomAndPan
-            panY = 0;
-        }
-
-        function redrawImageWithZoomAndPan() {
-            if (!imageCanvas.width || !imageCanvas.height) return; // Canvas not ready
-
-            canvasCtx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
-            canvasCtx.fillStyle = '#f0f0f0'; // Light gray background
-            canvasCtx.fillRect(0, 0, imageCanvas.width, imageCanvas.height);
-
-            if (!currentImage) {
-                drawInitialCanvasPlaceholder(); // Or just leave background if preferred
-                updateZoomButtons();
-                return;
-            }
-
-            // Calculate the dimensions of the portion of the source image to display
-            let sWidth = imageCanvas.width / zoomLevel;
-            let sHeight = imageCanvas.height / zoomLevel;
-
-            // Clamp panX and panY to keep the viewport within the source image boundaries
-            panX = Math.max(0, Math.min(panX, currentImage.width - sWidth));
-            panY = Math.max(0, Math.min(panY, currentImage.height - sHeight));
-            
-            // If image is smaller than viewport at current zoom, center it
-            let finalSX = panX, finalSY = panY;
-            let finalSWidth = sWidth, finalSHeight = sHeight;
-            let finalDX = 0, finalDY = 0;
-            let finalDWidth = imageCanvas.width, finalDHeight = imageCanvas.height;
-
-            if (currentImage.width * zoomLevel < imageCanvas.width) { // Image is effectively narrower
-                finalSWidth = currentImage.width; // Source uses full image width
-                finalSX = 0;
-                finalDWidth = currentImage.width * zoomLevel; // Drawn width is scaled image width
-                finalDX = (imageCanvas.width - finalDWidth) / 2; // Center horizontally
-            }
-            if (currentImage.height * zoomLevel < imageCanvas.height) { // Image is effectively shorter
-                finalSHeight = currentImage.height; // Source uses full image height
-                finalSY = 0;
-                finalDHeight = currentImage.height * zoomLevel; // Drawn height is scaled image height
-                finalDY = (imageCanvas.height - finalDHeight) / 2; // Center vertically
-            }
-            
-            // Prevent drawing outside image bounds if sWidth/sHeight were clamped due to pan
-            if (finalSX + finalSWidth > currentImage.width) finalSWidth = currentImage.width - finalSX;
-            if (finalSY + finalSHeight > currentImage.height) finalSHeight = currentImage.height - finalSY;
-
-
-            canvasCtx.drawImage(
-                currentImage,
-                finalSX, finalSY, finalSWidth, finalSHeight,
-                finalDX, finalDY, finalDWidth, finalDHeight
-            );
-            updateZoomButtons();
-        }
-        
-        function handleZoomIn() {
-            if (!currentImage) return;
-            const newZoomLevel = Math.min(MAX_ZOOM, zoomLevel * ZOOM_SENSITIVITY);
-            applyZoom(newZoomLevel);
-        }
-
-        function handleZoomOut() {
-            if (!currentImage) return;
-            // Allow zooming out slightly beyond initial fit, but not less than MIN_ZOOM
-            const newZoomLevel = Math.max(MIN_ZOOM, zoomLevel / ZOOM_SENSITIVITY);
-            applyZoom(newZoomLevel);
-        }
-        
-        function applyZoom(newZoomLevel) {
-            if (!currentImage || !imageCanvas.width || !imageCanvas.height) return;
-
-            // Calculate center of current view on the source image
-            const currentViewCenterX = panX + (imageCanvas.width / zoomLevel) / 2;
-            const currentViewCenterY = panY + (imageCanvas.height / zoomLevel) / 2;
-
-            zoomLevel = newZoomLevel;
-
-            // Adjust pan to keep the same center point
-            panX = currentViewCenterX - (imageCanvas.width / zoomLevel) / 2;
-            panY = currentViewCenterY - (imageCanvas.height / zoomLevel) / 2;
-            
-            redrawImageWithZoomAndPan();
-        }
-
-        function handleResetZoom() {
-            if (!currentImage) return;
-            calculateInitialZoomAndPan(); // Resets zoomLevel to initialFitZoom and panX/Y to 0
-            redrawImageWithZoomAndPan();
-        }
-
-        function updateZoomButtons() {
-            const hasImage = !!currentImage;
-            zoomInButton.disabled = !hasImage || zoomLevel >= MAX_ZOOM;
-            zoomOutButton.disabled = !hasImage || zoomLevel <= MIN_ZOOM; // Or zoomLevel <= initialFitZoom if we don't want to zoom out further
-            resetZoomButton.disabled = !hasImage;
-        }
-
-        function getEventPosition(event) {
-            const rect = imageCanvas.getBoundingClientRect();
-            if (event.touches && event.touches.length > 0) {
-                return { x: event.touches[0].clientX - rect.left, y: event.touches[0].clientY - rect.top };
-            }
-            return { x: event.clientX - rect.left, y: event.clientY - rect.top };
-        }
-
-        function startPan(event) {
-            if (!currentImage || zoomLevel <= initialFitZoom + 0.01) { // Allow panning only if significantly zoomed in
-                isPanning = false;
-                return;
-            }
-            if (event.cancelable) event.preventDefault(); // Prevent page scroll on touch
-            isPanning = true;
-            lastPanPosition = getEventPosition(event);
-            imageCanvas.style.cursor = 'grabbing';
-        }
-
-        function panImage(event) {
-            if (!isPanning || !currentImage) return;
-            if (event.cancelable) event.preventDefault();
-
-            const currentPosition = getEventPosition(event);
-            const deltaX = currentPosition.x - lastPanPosition.x;
-            const deltaY = currentPosition.y - lastPanPosition.y;
-
-            panX -= deltaX / zoomLevel;
-            panY -= deltaY / zoomLevel;
-
-            lastPanPosition = currentPosition;
-            redrawImageWithZoomAndPan();
-        }
-
-        function endPan() {
-            if (!isPanning) return;
-            isPanning = false;
-            imageCanvas.style.cursor = 'crosshair';
-        }
-
+        function calculateInitialZoomAndPan() { /* ... same as before ... */ if (!currentImage || !imageCanvas.width || !imageCanvas.height || imageCanvas.width === 0 || imageCanvas.height === 0) { initialFitZoom = 1.0; zoomLevel = 1.0; panX = 0; panY = 0; return; } const canvasAspect = imageCanvas.width / imageCanvas.height; const imageAspect = currentImage.width / currentImage.height; if (imageAspect > canvasAspect) { initialFitZoom = imageCanvas.width / currentImage.width; } else { initialFitZoom = imageCanvas.height / currentImage.height; } initialFitZoom = Math.max(MIN_ZOOM, initialFitZoom); zoomLevel = initialFitZoom; panX = 0; panY = 0; }
+        function redrawImageWithZoomAndPan() { /* ... same as before ... */ if (!imageCanvas.width || !imageCanvas.height) return; canvasCtx.clearRect(0, 0, imageCanvas.width, imageCanvas.height); canvasCtx.fillStyle = '#f0f0f0'; canvasCtx.fillRect(0, 0, imageCanvas.width, imageCanvas.height); if (!currentImage) { drawInitialCanvasPlaceholder(); updateZoomButtons(); return; } let sWidth = imageCanvas.width / zoomLevel; let sHeight = imageCanvas.height / zoomLevel; panX = Math.max(0, Math.min(panX, currentImage.width - sWidth)); panY = Math.max(0, Math.min(panY, currentImage.height - sHeight)); let finalSX = panX, finalSY = panY; let finalSWidth = sWidth, finalSHeight = sHeight; let finalDX = 0, finalDY = 0; let finalDWidth = imageCanvas.width, finalDHeight = imageCanvas.height; if (currentImage.width * zoomLevel < imageCanvas.width) { finalSWidth = currentImage.width; finalSX = 0; finalDWidth = currentImage.width * zoomLevel; finalDX = (imageCanvas.width - finalDWidth) / 2; } if (currentImage.height * zoomLevel < imageCanvas.height) { finalSHeight = currentImage.height; finalSY = 0; finalDHeight = currentImage.height * zoomLevel; finalDY = (imageCanvas.height - finalDHeight) / 2; } if (finalSX + finalSWidth > currentImage.width) finalSWidth = currentImage.width - finalSX; if (finalSY + finalSHeight > currentImage.height) finalSHeight = currentImage.height - finalSY; canvasCtx.drawImage( currentImage, finalSX, finalSY, finalSWidth, finalSHeight, finalDX, finalDY, finalDWidth, finalDHeight ); updateZoomButtons(); }
+        function handleZoomIn() { /* ... same as before ... */ if (!currentImage) return; const newZoomLevel = Math.min(MAX_ZOOM, zoomLevel * ZOOM_SENSITIVITY); applyZoom(newZoomLevel); }
+        function handleZoomOut() { /* ... same as before ... */ if (!currentImage) return; const newZoomLevel = Math.max(MIN_ZOOM, zoomLevel / ZOOM_SENSITIVITY); applyZoom(newZoomLevel); }
+        function applyZoom(newZoomLevel) { /* ... same as before ... */ if (!currentImage || !imageCanvas.width || !imageCanvas.height) return; const currentViewCenterX = panX + (imageCanvas.width / zoomLevel) / 2; const currentViewCenterY = panY + (imageCanvas.height / zoomLevel) / 2; zoomLevel = newZoomLevel; panX = currentViewCenterX - (imageCanvas.width / zoomLevel) / 2; panY = currentViewCenterY - (imageCanvas.height / zoomLevel) / 2; redrawImageWithZoomAndPan(); }
+        function handleResetZoom() { /* ... same as before ... */ if (!currentImage) return; calculateInitialZoomAndPan(); redrawImageWithZoomAndPan(); }
+        function updateZoomButtons() { /* ... same as before ... */ const hasImage = !!currentImage; zoomInButton.disabled = !hasImage || zoomLevel >= MAX_ZOOM; zoomOutButton.disabled = !hasImage || zoomLevel <= MIN_ZOOM; resetZoomButton.disabled = !hasImage; }
+        function getEventPosition(event) { /* ... same as before ... */ const rect = imageCanvas.getBoundingClientRect(); if (event.touches && event.touches.length > 0) { return { x: event.touches[0].clientX - rect.left, y: event.touches[0].clientY - rect.top }; } return { x: event.clientX - rect.left, y: event.clientY - rect.top }; }
+        function startPan(event) { /* ... same as before ... */ if (!currentImage || zoomLevel <= initialFitZoom + 0.01) { isPanning = false; return; } if (event.cancelable) event.preventDefault(); isPanning = true; lastPanPosition = getEventPosition(event); imageCanvas.style.cursor = 'grabbing'; }
+        function panImage(event) { /* ... same as before ... */ if (!isPanning || !currentImage) return; if (event.cancelable) event.preventDefault(); const currentPosition = getEventPosition(event); const deltaX = currentPosition.x - lastPanPosition.x; const deltaY = currentPosition.y - lastPanPosition.y; panX -= deltaX / zoomLevel; panY -= deltaY / zoomLevel; lastPanPosition = currentPosition; redrawImageWithZoomAndPan(); }
+        function endPan() { /* ... same as before ... */ if (!isPanning) return; isPanning = false; imageCanvas.style.cursor = 'crosshair'; }
 
         // --- Color Picking ---
         function handleCanvasClick(event) {
-            if (isPanning || !currentImage) return; // Don't pick color if panning action just ended or no image
-
-            const pos = getEventPosition(event);
-            const x = pos.x;
-            const y = pos.y;
-
-            // Check if click is within the drawn image area on canvas, especially if image is centered and smaller than canvas
+            if (isPanning || !currentImage) return;
+            const pos = getEventPosition(event); const x = pos.x; const y = pos.y;
             let drawnImageRect = { x:0, y:0, width: imageCanvas.width, height: imageCanvas.height };
-            if (currentImage.width * zoomLevel < imageCanvas.width) {
-                drawnImageRect.width = currentImage.width * zoomLevel;
-                drawnImageRect.x = (imageCanvas.width - drawnImageRect.width) / 2;
-            }
-            if (currentImage.height * zoomLevel < imageCanvas.height) {
-                drawnImageRect.height = currentImage.height * zoomLevel;
-                drawnImageRect.y = (imageCanvas.height - drawnImageRect.height) / 2;
-            }
-
-            if (x < drawnImageRect.x || x > drawnImageRect.x + drawnImageRect.width ||
-                y < drawnImageRect.y || y > drawnImageRect.y + drawnImageRect.height) {
-                // Clicked outside the actual image area (e.g., on the gray background)
-                return;
-            }
+            if (currentImage.width*zoomLevel < imageCanvas.width) { drawnImageRect.width = currentImage.width*zoomLevel; drawnImageRect.x = (imageCanvas.width - drawnImageRect.width)/2; }
+            if (currentImage.height*zoomLevel < imageCanvas.height) { drawnImageRect.height = currentImage.height*zoomLevel; drawnImageRect.y = (imageCanvas.height - drawnImageRect.height)/2; }
+            if (x<drawnImageRect.x || x>drawnImageRect.x+drawnImageRect.width || y<drawnImageRect.y || y>drawnImageRect.y+drawnImageRect.height) return;
 
             const pixelData = canvasCtx.getImageData(x, y, 1, 1).data;
             selectedRgb = { r: pixelData[0], g: pixelData[1], b: pixelData[2] };
+            targetLab = rgbToLab(selectedRgb); // Convert picked RGB to LAB
 
             selectedColorInfo.innerHTML = `
                 <div class="flex items-center">
@@ -548,14 +348,16 @@
             mixingResult.innerHTML = '<p class="text-gray-500">Click "Find Paint Mix" to get suggestions.</p>';
         }
 
-        // --- Color Mixing Logic (simplified, remains the same) ---
+        // --- Color Mixing Logic (Updated for CIELAB and Opacity) ---
         async function handleFindMix() {
-            if (!selectedRgb) { alertUser("Please select a color from the image first."); return; }
+            if (!targetLab) { // Check targetLab instead of selectedRgb
+                alertUser("Please select a color from the image first."); return;
+            }
             showLoadingModal(true);
             mixingResult.innerHTML = '<p class="text-gray-600">Calculating best mix...</p>';
             await new Promise(resolve => setTimeout(resolve, 50));
             try {
-                const bestMix = findClosestPaintMix(selectedRgb);
+                const bestMix = findClosestPaintMix(targetLab); // Pass targetLab
                 displayMixResult(bestMix);
             } catch (error) {
                 console.error("Error finding mix:", error);
@@ -563,34 +365,152 @@
                 alertUser(`An error occurred: ${error.message}`);
             } finally { showLoadingModal(false); }
         }
-        function colorDiff(rgb1, rgb2) { /* ... */ const dr = rgb1.r - rgb2.r; const dg = rgb1.g - rgb2.g; const db = rgb1.b - rgb2.b; return Math.sqrt(dr * dr + dg * dg + db * db); }
-        function mixTwoColors(c1, r1, c2, r2) { /* ... */ const t = r1+r2; if(t===0)return{r:0,g:0,b:0}; return {r:Math.round((c1.rgb.r*r1+c2.rgb.r*r2)/t), g:Math.round((c1.rgb.g*r1+c2.rgb.g*r2)/t), b:Math.round((c1.rgb.b*r1+c2.rgb.b*r2)/t)};}
-        function mixThreeColors(c1,r1,c2,r2,c3,r3){ /* ... */ const t=r1+r2+r3; if(t===0)return{r:0,g:0,b:0}; return {r:Math.round((c1.rgb.r*r1+c2.rgb.r*r2+c3.rgb.r*r3)/t),g:Math.round((c1.rgb.g*r1+c2.rgb.g*r2+c3.rgb.g*r3)/t),b:Math.round((c1.rgb.b*r1+c2.rgb.b*r2+c3.rgb.b*r3)/t)};}
-        function findClosestPaintMix(targetRgb) {
-            let bestMatch = { paintNames: [], mixedRgb: null, diff: Infinity, recipe: "" };
-            WINSOR_NEWTON_ACRYLICS.forEach(p => { const d = colorDiff(targetRgb, p.rgb); if (d < bestMatch.diff) bestMatch = { paintNames: [p.name], mixedRgb: p.rgb, diff: d, recipe: `1 part ${p.name}` }; });
+
+        // Color difference in CIELAB space (Delta E 76)
+        function colorDiffLab(lab1, lab2) {
+            const dL = lab1.l - lab2.l;
+            const da = lab1.a - lab2.a;
+            const db = lab1.b - lab2.b;
+            return Math.sqrt(dL * dL + da * da + db * db);
+        }
+
+        // Mix two colors considering opacity and ratios (simplified model)
+        function mixTwoColors(paint1, ratio1, paint2, ratio2) {
+            // paint1 and paint2 are full paint objects {name, rgb, opacity, lab}
+            const w1 = ratio1 * paint1.opacity;
+            const w2 = ratio2 * paint2.opacity;
+            const totalWeight = w1 + w2;
+
+            if (totalWeight === 0) return { r: 0, g: 0, b: 0 }; // Should not happen with valid inputs
+
+            const r = Math.round((paint1.rgb.r * w1 + paint2.rgb.r * w2) / totalWeight);
+            const g = Math.round((paint1.rgb.g * w1 + paint2.rgb.g * w2) / totalWeight);
+            const b = Math.round((paint1.rgb.b * w1 + paint2.rgb.b * w2) / totalWeight);
+            return { r: Math.max(0, Math.min(255, r)), g: Math.max(0, Math.min(255, g)), b: Math.max(0, Math.min(255, b)) };
+        }
+
+        // Mix three colors considering opacity and ratios
+        function mixThreeColors(paint1, ratio1, paint2, ratio2, paint3, ratio3) {
+            const w1 = ratio1 * paint1.opacity;
+            const w2 = ratio2 * paint2.opacity;
+            const w3 = ratio3 * paint3.opacity;
+            const totalWeight = w1 + w2 + w3;
+
+            if (totalWeight === 0) return { r: 0, g: 0, b: 0 };
+
+            const r = Math.round((paint1.rgb.r * w1 + paint2.rgb.r * w2 + paint3.rgb.r * w3) / totalWeight);
+            const g = Math.round((paint1.rgb.g * w1 + paint2.rgb.g * w2 + paint3.rgb.g * w3) / totalWeight);
+            const b = Math.round((paint1.rgb.b * w1 + paint2.rgb.b * w2 + paint3.rgb.b * w3) / totalWeight);
+            return { r: Math.max(0, Math.min(255, r)), g: Math.max(0, Math.min(255, g)), b: Math.max(0, Math.min(255, b)) };
+        }
+
+        function findClosestPaintMix(targetLabColor) { // Takes target LAB
+            let bestMatch = { paintNames: [], mixedRgb: null, mixedLab: null, diff: Infinity, recipe: "" };
+
+            // 1. Check single paints
+            for (const paint of WINSOR_NEWTON_ACRYLICS) {
+                const diff = colorDiffLab(targetLabColor, paint.lab); // Compare LAB values
+                if (diff < bestMatch.diff) {
+                    bestMatch = {
+                        paintNames: [paint.name],
+                        mixedRgb: paint.rgb, // Store original RGB for display
+                        mixedLab: paint.lab,
+                        diff: diff,
+                        recipe: `1 part ${paint.name}`
+                    };
+                }
+            }
+
+            // 2. Check two-paint mixes
             const ratios = [{r1:1,r2:3},{r1:1,r2:2},{r1:1,r2:1},{r1:2,r2:1},{r1:3,r2:1}];
-            for(let i=0;i<WINSOR_NEWTON_ACRYLICS.length;i++){ for(let j=i+1;j<WINSOR_NEWTON_ACRYLICS.length;j++){
-                const p1=WINSOR_NEWTON_ACRYLICS[i], p2=WINSOR_NEWTON_ACRYLICS[j];
-                ratios.forEach(r => {
-                    [{c1:p1,rat1:r.r1,c2:p2,rat2:r.r2}, {c1:p1,rat1:r.r2,c2:p2,rat2:r.r1}].forEach(o => {
-                        if (o.rat1 === r.r1 && o.rat2 === r.r2 && r.r1 === r.r2 && o.c1 === p1 && o.c2 === p2) { /* skip redundant for 1:1 and same order */ } else {
-                            const m=mixTwoColors(o.c1,o.rat1,o.c2,o.rat2), d=colorDiff(targetRgb,m);
-                            if(d<bestMatch.diff) bestMatch={paintNames:[o.c1.name,o.c2.name],mixedRgb:m,diff:d,recipe:`${o.rat1} part(s) ${o.c1.name} + ${o.rat2} part(s) ${o.c2.name}`};
-                        }
+            for(let i=0; i<WINSOR_NEWTON_ACRYLICS.length; i++){
+                for(let j=i+1; j<WINSOR_NEWTON_ACRYLICS.length; j++){
+                    const p1 = WINSOR_NEWTON_ACRYLICS[i];
+                    const p2 = WINSOR_NEWTON_ACRYLICS[j];
+                    ratios.forEach(r => {
+                        // Iterate through paint orderings for the same ratio pair
+                        [{paintA: p1, ratioA: r.r1, paintB: p2, ratioB: r.r2},
+                         {paintA: p1, ratioA: r.r2, paintB: p2, ratioB: r.r1}].forEach((mixOrder, index) => {
+                            // Avoid redundant calculation for 1:1 ratio
+                            if (r.r1 === r.r2 && index > 0) return;
+
+                            const mixedRgbResult = mixTwoColors(mixOrder.paintA, mixOrder.ratioA, mixOrder.paintB, mixOrder.ratioB);
+                            const mixedLabResult = rgbToLab(mixedRgbResult);
+                            const d = colorDiffLab(targetLabColor, mixedLabResult);
+
+                            if(d < bestMatch.diff) {
+                                bestMatch = {
+                                    paintNames: [mixOrder.paintA.name, mixOrder.paintB.name],
+                                    mixedRgb: mixedRgbResult,
+                                    mixedLab: mixedLabResult,
+                                    diff: d,
+                                    recipe: `${mixOrder.ratioA} part(s) ${mixOrder.paintA.name} + ${mixOrder.ratioB} part(s) ${mixOrder.paintB.name}`
+                                };
+                            }
+                        });
                     });
-                });
-            }}
-            if(WINSOR_NEWTON_ACRYLICS.length>=3){ for(let i=0;i<WINSOR_NEWTON_ACRYLICS.length;i++){ for(let j=i+1;j<WINSOR_NEWTON_ACRYLICS.length;j++){ for(let k=j+1;k<WINSOR_NEWTON_ACRYLICS.length;k++){
-                const p1=WINSOR_NEWTON_ACRYLICS[i],p2=WINSOR_NEWTON_ACRYLICS[j],p3=WINSOR_NEWTON_ACRYLICS[k];
-                [{r1:1,r2:1,r3:1},{r1:2,r2:1,r3:1},{r1:1,r2:2,r3:1},{r1:1,r2:1,r3:2}].forEach(r=>{
-                    const m=mixThreeColors(p1,r.r1,p2,r.r2,p3,r.r3), d=colorDiff(targetRgb,m);
-                    if(d<bestMatch.diff) bestMatch={paintNames:[p1.name,p2.name,p3.name],mixedRgb:m,diff:d,recipe:`${r.r1}p ${p1.name} + ${r.r2}p ${p2.name} + ${r.r3}p ${p3.name}`.replace(/1p/g, '1 part')};
-                });
-            }}}}
+                }
+            }
+
+            // 3. Check three-paint mixes
+            if(WINSOR_NEWTON_ACRYLICS.length >= 3){
+                for(let i=0; i<WINSOR_NEWTON_ACRYLICS.length; i++){
+                    for(let j=i+1; j<WINSOR_NEWTON_ACRYLICS.length; j++){
+                        for(let k=j+1; k<WINSOR_NEWTON_ACRYLICS.length; k++){
+                            const p1 = WINSOR_NEWTON_ACRYLICS[i];
+                            const p2 = WINSOR_NEWTON_ACRYLICS[j];
+                            const p3 = WINSOR_NEWTON_ACRYLICS[k];
+                            
+                            const threePaintRatios = [{r1:1,r2:1,r3:1},{r1:2,r2:1,r3:1},{r1:1,r2:2,r3:1},{r1:1,r2:1,r3:2}];
+                            
+                            threePaintRatios.forEach(r => {
+                                // Test one order of paints (p1, p2, p3) with these ratios
+                                // A more robust solution would test all 3! = 6 permutations of p1, p2, p3 for each ratio set.
+                                // This is a simplification to keep computation manageable.
+                                const mixedRgbResult = mixThreeColors(p1, r.r1, p2, r.r2, p3, r.r3);
+                                const mixedLabResult = rgbToLab(mixedRgbResult);
+                                const d = colorDiffLab(targetLabColor, mixedLabResult);
+                                if(d < bestMatch.diff) {
+                                    bestMatch = {
+                                        paintNames: [p1.name, p2.name, p3.name],
+                                        mixedRgb: mixedRgbResult,
+                                        mixedLab: mixedLabResult,
+                                        diff: d,
+                                        recipe: `${r.r1} part(s) ${p1.name} + ${r.r2} part(s) ${p2.name} + ${r.r3} part(s) ${p3.name}`
+                                    };
+                                }
+                            });
+                        }
+                    }
+                }
+            }
             return bestMatch;
         }
-        function displayMixResult(mix) { /* ... */ if (!mix || !mix.mixedRgb) { mixingResult.innerHTML = '<p class="text-red-500">Could not find mix.</p>'; return; } let swHTML = ''; if (mix.paintNames) mix.paintNames.forEach(n => { const p = WINSOR_NEWTON_ACRYLICS.find(paint => paint.name === n); if (p) swHTML += `<span class="paint-swatch" style="background-color: rgb(${p.rgb.r},${p.rgb.g},${p.rgb.b});" title="${n}"></span>`; }); mixingResult.innerHTML = `<div class="flex items-center mb-3"><span class="color-swatch mr-3" style="background-color: rgb(${mix.mixedRgb.r},${mix.mixedRgb.g},${mix.mixedRgb.b});"></span><div><p class="font-semibold text-gray-800">Closest Mix (RGB: ${mix.mixedRgb.r},${mix.mixedRgb.g},${mix.mixedRgb.b})</p><p class="text-sm text-gray-600">Difference: ${mix.diff.toFixed(2)}</p></div></div><p class="text-gray-700 font-medium mb-1">Recipe:</p><div class="flex items-center mb-2">${swHTML}</div><p class="text-gray-700 bg-gray-100 p-2 rounded">${mix.recipe}</p>`;}
+
+        function displayMixResult(mix) {
+            if (!mix || !mix.mixedRgb) { // Check mixedRgb for display
+                mixingResult.innerHTML = '<p class="text-red-500">Could not find mix.</p>'; return;
+            }
+            let swHTML = '';
+            if (mix.paintNames) {
+                mix.paintNames.forEach(n => {
+                    const p = WINSOR_NEWTON_ACRYLICS.find(paint => paint.name === n);
+                    if (p) swHTML += `<span class="paint-swatch" style="background-color: rgb(${p.rgb.r},${p.rgb.g},${p.rgb.b});" title="${n} (Opacity: ${p.opacity})"></span>`;
+                });
+            }
+            mixingResult.innerHTML = `
+                <div class="flex items-center mb-3">
+                    <span class="color-swatch mr-3" style="background-color: rgb(${mix.mixedRgb.r},${mix.mixedRgb.g},${mix.mixedRgb.b});"></span>
+                    <div>
+                        <p class="font-semibold text-gray-800">Closest Mix (RGB: ${mix.mixedRgb.r},${mix.mixedRgb.g},${mix.mixedRgb.b})</p>
+                        <p class="text-sm text-gray-600">LAB L: ${mix.mixedLab.l.toFixed(1)}, a: ${mix.mixedLab.a.toFixed(1)}, b: ${mix.mixedLab.b.toFixed(1)}</p>
+                        <p class="text-sm text-gray-600">Color Difference (ΔE*76): ${mix.diff.toFixed(2)} (lower is better)</p>
+                    </div>
+                </div>
+                <p class="text-gray-700 font-medium mb-1">Recipe:</p>
+                <div class="flex items-center mb-2">${swHTML}</div>
+                <p class="text-gray-700 bg-gray-100 p-2 rounded">${mix.recipe}</p>`;
+        }
 
         // --- Utility Functions ---
         function componentToHex(c){const h=c.toString(16);return h.length==1?"0"+h:h;} function rgbToHex(r,g,b){return componentToHex(r)+componentToHex(g)+componentToHex(b);}
